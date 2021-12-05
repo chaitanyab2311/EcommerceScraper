@@ -34,14 +34,14 @@ def GetEbayItems(soup):
 
             item_image_url = item.find("img",{"class":"s-item__image-img"})['src']
 
-
-            final.append({
-                'productname' : item_name,
-                'productprice' : item_price_striped,
-                'website' : 'Ebay',
-                'product_url': item_url,
-                'product_image_url': item_image_url
-            })
+            if(item_price_striped != ''):
+                final.append({
+                    'productname' : item_name,
+                    'productprice' : item_price_striped,
+                    'website' : 'Ebay',
+                    'product_url': item_url,
+                    'product_image_url': item_image_url
+                })
 
             
         if item_count == 10:
@@ -64,13 +64,14 @@ def GetAmazonitems(soup):
             item_url = item.find("a",{"class":"a-link-normal s-no-outline"})['href']
             item_image_url = item.find("img",{"class":"s-image"})['src']
             
-            final.append({
-                'productname' : item_name,
-                'productprice' : item_price,
-                'website' : 'Amazon',
-                'product_url': item_url,
-                'product_image_url': item_image_url
-            })
+            if(item_price != ''):
+                final.append({
+                    'productname' : item_name,
+                    'productprice' : item_price,
+                    'website' : 'Amazon',
+                    'product_url': item_url,
+                    'product_image_url': item_image_url
+                })
             if item_count == 10: 
                 break
     except AttributeError as Ae:
@@ -128,7 +129,3 @@ def start_scraping(search):
         final_result['amazon'] = Amazon_Items
     
     return final_result
-
-
-
-start_scraping("iphone")

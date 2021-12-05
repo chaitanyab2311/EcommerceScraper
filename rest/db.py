@@ -133,9 +133,9 @@ def getMostSearchedProducts():
           productsDict[i[2]] = 1
 
     productsDict = dict(sorted(productsDict.items(), key=lambda item: item[1],reverse = True))
-    
 
   except Exception as e:
     enqueueDataToLogsExchange("Exception occured while adding search entries" + str(e),"debug")
     print("Exception occured" + str(e))
 
+  return productsDict

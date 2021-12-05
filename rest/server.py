@@ -63,7 +63,13 @@ def enqueueDataToWorker(message):
     rabbitMQChannel.queue_declare(queue='toWorker')
 
     rabbitMQChannel.basic_publish(
-        exchange='', routing_key='toWorker', body=json.dumps(message))
+        exchange='', routing_key='toWorker',
+        properties=pika.BasicProperties(correlation_id = props.correlation_id),
+        body=json.dumps(message))
+    
+    ch.basic_ack(delivery_tag=method.delivery_tag)
+    channel.basic_qos(prefetch_count=1)
+    channel.basic_consume(queue='rpc_queue', on_message_callback=on_request)
 
     print(" [x] Sent %r:%r" % ('toWorker', message))
 
@@ -82,6 +88,10 @@ def analyze():
         product = data['product_name']
         final_output = start_scraping(product)
         response = insert_prices(final_output)
+        addSearchProduct(product)
+
+
+
         # response = {
         #     "amazon" :[
         #         {
@@ -114,13 +124,16 @@ def analyze():
         return Response(response="Something went wrong!", status=500, mimetype="application/json")
 
 
+@app.route('/apiv1/getMostSearched', methods=['POST'])
+def most_searched():
+    try:
+        most_searched = getMostSearchedProducts()
+        print(most_searched)
+        return Response(response=json.dumps(most_searched), status=200, mimetype="application/json")
 
-@app.route('/apiv1/handle_form', methods=['POST'])
-def handle_form():
-    print("Posted file: {}".format(request.files['file']))
-    file = request.files['file']
-    print(type(file))
-    return ""
+    except Exception as e:
+        enqueueDataToLogsExchange('Error occured in api /apiv1/analyze','info')
+        return Response(response="Something went wrong!", status=500, mimetype="application/json")
 
 
 
