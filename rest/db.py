@@ -8,6 +8,11 @@ from cassandra.query import tuple_factory
 import pika
 import os
 import re
+import platform
+import json
+
+
+cluster = Cluster()
 
 ##
 ## Configure test vs. production
@@ -15,6 +20,7 @@ import re
 rabbitMQHost = os.getenv("RABBITMQ_HOST") or "localhost"
 
 print("Connecting to rabbitmq({})".format(rabbitMQHost))
+
 
 
 def enqueueDataToLogsExchange(message,messageType):
@@ -39,10 +45,6 @@ def enqueueDataToLogsExchange(message,messageType):
 
     rabbitMQChannel.close()
     rabbitMQ.close()
-
-
-cluster = Cluster()
-
 
 def insert_prices(prices_data):
   try:
@@ -74,7 +76,7 @@ def presentindatabase(search_term):
   try:
     results = {}
     session = cluster.connect('products')
-    # rows = session.execute("SELECT * FROM products.products WHERE productname LIKE '" + search_term + "%' ALLOW FILTERING;")
+    
     rows = session.execute("SELECT * FROM products.products;")
     if(rows):
       for i in rows:
@@ -98,12 +100,12 @@ def presentindatabase(search_term):
               "product_image_url":i[6]
             })
       
-    return results
+    
   except Exception as e:
     enqueueDataToLogsExchange("Exception occured" + str(e),"debug")
     print("Exception occured" + str(e))
 
-
+  return results
 
 
 def addSearchProduct(product_name):

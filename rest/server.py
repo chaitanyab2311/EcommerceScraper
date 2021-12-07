@@ -6,14 +6,51 @@ import pika, redis
 import hashlib, requests
 import json
 import pickle
-import platform
+import uuid
 
-from scrape import *
 from db import *
-
 from flask_cors import CORS
-app = Flask(__name__)
 
+
+class enqueueWorker(object):
+
+    def __init__(self):
+        self.connection = pika.BlockingConnection(
+            pika.ConnectionParameters(host=rabbitMQHost))
+ 
+        self.channel = self.connection.channel()
+
+        result = self.channel.queue_declare(queue='', exclusive=True)
+        self.callback_queue = result.method.queue
+
+        self.channel.basic_consume(
+            queue=self.callback_queue,
+            on_message_callback=self.onResponse,
+            auto_ack=True)
+    
+    def onResponse(self, ch, method, props, body):
+        if self.corr_id == props.correlation_id:
+            self.response = body
+
+
+    def enqueueDataToWorker(self,message):
+
+        self.response = None
+        self.corr_id = str(uuid.uuid4())
+
+    
+        self.channel.basic_publish(
+            exchange='', routing_key='toWorker',properties=pika.BasicProperties(
+                reply_to=self.callback_queue,
+                correlation_id=self.corr_id,
+            ), 
+            body=json.dumps(message))
+
+
+        while self.response is None:
+            self.connection.process_data_events()
+        
+        return str(self.response.decode('utf-8'))
 
 
 
@@ -55,27 +92,6 @@ def enqueueDataToLogsExchange(message,messageType):
     rabbitMQ.close()
 
 
-def enqueueDataToWorker(message):
-    rabbitMQ = pika.BlockingConnection(
-            pika.ConnectionParameters(host=rabbitMQHost))
-    rabbitMQChannel = rabbitMQ.channel()
-
-    rabbitMQChannel.queue_declare(queue='toWorker')
-
-    rabbitMQChannel.basic_publish(
-        exchange='', routing_key='toWorker',
-        properties=pika.BasicProperties(correlation_id = props.correlation_id),
-        body=json.dumps(message))
-    
-    ch.basic_ack(delivery_tag=method.delivery_tag)
-    channel.basic_qos(prefetch_count=1)
-    channel.basic_consume(queue='rpc_queue', on_message_callback=on_request)
-
-    print(" [x] Sent %r:%r" % ('toWorker', message))
-
-    rabbitMQChannel.close()
-    rabbitMQ.close()
-
 
 @app.route('/apiv1/fetchPrices', methods=['POST'])
 def analyze():
@@ -84,54 +100,39 @@ def analyze():
         # enqueueDataToLogsExchange('Into fetch prices api',"info")
 
         data = request.get_json()
-        print("-------Data-------" + str(data))
         product = data['product_name']
-        final_output = start_scraping(product)
-        response = insert_prices(final_output)
-        addSearchProduct(product)
 
+        dataToWorker = enqueueWorker()
+        response = dataToWorker.enqueueDataToWorker(data)
 
-
-        # response = {
-        #     "amazon" :[
-        #         {
-        #             "product_name":"iphone X",
-        #             "product_price" : 230
-        #         },
-        #         {
-        #             "product_name":"iphone X",
-        #             "product_price" : 270
-        #         }
-        #     ],
-        #     "ebay":[
-        #         {
-        #              "product_name":"iphone X",
-        #             "product_price" : 130
-        #         },
-        #         {
-        #             "product_name":"iphone X",
-        #             "product_price" : 430
-        #         }
-        #     ]
-        # }
+        response = json.loads(response)
+        print(type(response))
 
         # enqueueDataToLogsExchange('Fetch prices api executed succesfully',"info")
 
         return Response(response=json.dumps(response), status=200, mimetype="application/json")
         
     except Exception as e:
+        print("Exception" + str(e))
         enqueueDataToLogsExchange('Error occured in api /apiv1/analyze','info')
         return Response(response="Something went wrong!", status=500, mimetype="application/json")
+
 
 
 @app.route('/apiv1/getMostSearched', methods=['POST'])
 def most_searched():
     try:
+
+        # enqueueDataToLogsExchange('Into get most searched api',"info")
+
         most_searched = getMostSearchedProducts()
-        print(most_searched)
+
+        # enqueueDataToLogsExchange('After get most searched api',"info")
+
         return Response(response=json.dumps(most_searched), status=200, mimetype="application/json")
 
     except Exception as e:
+        print("Something went wrong" + str(e))
         enqueueDataToLogsExchange('Error occured in api /apiv1/analyze','info')
         return Response(response="Something went wrong!", status=500, mimetype="application/json")
 

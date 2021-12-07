@@ -60,15 +60,23 @@ def callback(ch, method, properties, body):
     print(f" [x] {method.routing_key}:{body}", file=sys.stdout, flush=True)
     queuedata = json.loads(body)
 
-    link = body['link']
+    product = queuedata['product_name']
 
-    execute_scraper(link)
+    final_output = start_scraping(product)
+    response = insert_prices(final_output)
+    addSearchProduct(product)
+
+    ch.basic_publish(exchange='',
+                     routing_key=properties.reply_to,
+                     properties=pika.BasicProperties(correlation_id = properties.correlation_id),
+                     body=json.dumps(response))
+
+    ch.basic_ack(delivery_tag=method.delivery_tag)
 
     sys.stdout.flush()
     sys.stderr.flush()
 
 
-rabbitMQChannel.basic_consume(
-    queue=queue_name, on_message_callback=callback, auto_ack=True)
-
+rabbitMQChannel.basic_qos(prefetch_count=1)
+rabbitMQChannel.basic_consume(queue='toWorker', on_message_callback=callback)
 rabbitMQChannel.start_consuming()
